@@ -194,6 +194,49 @@ class UsersController extends OCSController {
 	}
 
 	/**
+	 * @NoAdminRequired
+	 *
+	 * returns a list of users and their data based on their groupid
+	 */
+	public function getUsersGroupDetails(string $groupId, int $limit = null, int $offset = 0): DataResponse {
+		$user = $this->userSession->getUser();
+
+		$isSubadminOfGroup = false;
+		$group = $this->groupManager->get($groupId);
+		if ($group !== null) {
+			$isSubadminOfGroup = $this->groupManager->getSubAdmin()->isSubAdminofGroup($user, $group);
+		} else {
+			throw new OCSException('The requested group could not be found', \OCP\API::RESPOND_NOT_FOUND);
+		}
+
+		// Check subadmin has access to this group
+		if($this->groupManager->isAdmin($user->getUID())
+		   || $isSubadminOfGroup) {
+			$users = $group->getUsers();
+			$users =  array_map(function($user) {
+				/** @var IUser $user */
+				return $user->getUID();
+			}, $users);
+			$users = array_slice(array_values($users), $offset, $limit);
+		} else {
+			throw new OCSException('User does not have access to specified group', \OCP\API::RESPOND_UNAUTHORISED);
+		}
+		$usersDetails = [];
+		foreach ($users as $key => $userId) {
+			$userData = $this->getUserData($userId);
+			// Do not insert empty entry
+			if(!empty($userData)) {
+				$usersDetails[$userId] = $userData;
+			}
+		}
+
+		return new DataResponse([
+			'users' => $usersDetails
+		]);
+
+	}
+
+	/**
 	 * @PasswordConfirmationRequired
 	 * @NoAdminRequired
 	 *
